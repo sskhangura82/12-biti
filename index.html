@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<title>Courtyard Games</title>
+<meta name="description" content="Childhood games from the village courtyard, drawn in chalk: 12 Biti, chalk tic-tac-toe, and Saanp Seedhi (Snakes & Ladders)."/>
+<meta property="og:title" content="Courtyard Games"/>
+<meta property="og:description" content="12 Biti · X·O! · Saanp Seedhi — childhood games drawn in chalk, for phones and iPads."/>
+<meta property="og:type" content="website"/>
+<meta name="theme-color" content="#1B0D07"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Courtyard"/>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Cdefs%3E%3CradialGradient%20id='g'%20cx='35%25'%20cy='30%25'%20r='75%25'%3E%3Cstop%20offset='0%25'%20stop-color='%23FFE3A1'/%3E%3Cstop%20offset='45%25'%20stop-color='%23FFC24B'/%3E%3Cstop%20offset='100%25'%20stop-color='%23A85E10'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx='32'%20cy='32'%20r='28'%20fill='url(%23g)'/%3E%3C/svg%3E"/>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Cdefs%3E%3CradialGradient%20id='g'%20cx='35%25'%20cy='30%25'%20r='75%25'%3E%3Cstop%20offset='0%25'%20stop-color='%23FFE3A1'/%3E%3Cstop%20offset='45%25'%20stop-color='%23FFC24B'/%3E%3Cstop%20offset='100%25'%20stop-color='%23A85E10'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle%20cx='32'%20cy='32'%20r='28'%20fill='url(%23g)'/%3E%3C/svg%3E"/>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&display=swap');
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; min-height: 100%; }
+body {
+  font-family: 'Baloo 2','Comic Sans MS',ui-rounded,system-ui,sans-serif;
+  background: radial-gradient(130% 95% at 50% 12%, #4A2B1B 0%, #331C10 46%, #1B0D07 100%) fixed;
+  color: #FFF3DC;
+  overscroll-behavior: none;
+  -webkit-user-select: none; user-select: none;
+}
+.glow {
+  position: fixed; left: 50%; top: 32%;
+  width: 130vw; height: 80vh;
+  transform: translate(-50%,-50%);
+  background: radial-gradient(closest-side, rgba(255,190,90,.16), rgba(255,160,60,.05) 55%, transparent 75%);
+  pointer-events: none;
+  animation: glow 6s ease-in-out infinite;
+}
+@keyframes glow { 0%,100% { opacity:.5; } 50% { opacity:.8; } }
+.wrap {
+  position: relative; z-index: 1;
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 32px 20px 40px; gap: 22px;
+  animation: rise .45s ease-out;
+}
+@keyframes rise { from { transform: translateY(14px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+h1 {
+  margin: 0; font-size: clamp(2.6rem, 9vw, 3.6rem); font-weight: 800; line-height: 1;
+  color: #FFF3DC; text-shadow: 0 3px 0 rgba(0,0,0,.35);
+  transform: rotate(-2deg); text-align: center;
+}
+.tag { margin-top: 6px; font-weight: 700; color: rgba(255,222,166,.9); text-align: center; }
+.sub { font-size: .85rem; color: rgba(255,222,166,.6); text-align: center; margin-top: 2px; }
+.cards { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 380px; }
+a.card {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px; border-radius: 22px; text-decoration: none; color: #FFF3DC;
+  background: linear-gradient(180deg, rgba(255,243,220,.08), rgba(255,243,220,.03));
+  border: 1.5px solid rgba(255,243,220,.22);
+  box-shadow: 0 6px 18px rgba(0,0,0,.35);
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+a.card:active { transform: scale(.97); }
+a.card .art {
+  width: 58px; height: 58px; border-radius: 16px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px; background: rgba(0,0,0,.28);
+  border: 1.5px solid rgba(255,243,220,.18);
+}
+a.card .name { font-size: 1.25rem; font-weight: 800; line-height: 1.15; }
+a.card .desc { font-size: .8rem; font-weight: 600; color: rgba(255,222,166,.7); line-height: 1.25; margin-top: 2px; }
+a.card .go { margin-left: auto; font-size: 1.3rem; opacity: .7; }
+.c1 { border-color: rgba(255,194,75,.55); }  .c1 .art { border-color: rgba(255,194,75,.6); }
+.c2 { border-color: rgba(45,212,191,.55); }  .c2 .art { border-color: rgba(45,212,191,.6); }
+.c3 { border-color: rgba(249,115,182,.55); } .c3 .art { border-color: rgba(249,115,182,.6); }
+.rangoli { display: flex; gap: 7px; }
+.rangoli span { width: 8px; height: 8px; border-radius: 50%; }
+.foot { font-size: .75rem; color: rgba(255,222,166,.5); text-align: center; line-height: 1.4; max-width: 320px; }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+<div class="wrap">
+  <div>
+    <h1>Courtyard Games</h1>
+    <div class="tag">chalk games from Dad's childhood ✨</div>
+    <div class="sub">pick a game — sounds on! 🔊</div>
+  </div>
+
+  <div class="cards">
+    <a class="card c1" href="./12-biti.html">
+      <div class="art">🪨</div>
+      <div>
+        <div class="name">12 Biti</div>
+        <div class="desc">Grab a stone, follow the chalk lines, jump to capture all 12</div>
+      </div>
+      <div class="go">▶</div>
+    </a>
+    <a class="card c2" href="./tictactoe.html">
+      <div class="art">❌⭕</div>
+      <div>
+        <div class="name">X · O!</div>
+        <div class="desc">Tic-tac-toe, best of 5 — in Blitz your marks vanish. No draws!</div>
+      </div>
+      <div class="go">▶</div>
+    </a>
+    <a class="card c3" href="./snakes-and-ladders.html">
+      <div class="art">🐍🪜</div>
+      <div>
+        <div class="name">Saanp Seedhi</div>
+        <div class="desc">Roll the dice, climb the ladders, dodge the snake on 99</div>
+      </div>
+      <div class="go">▶</div>
+    </a>
+  </div>
+
+  <div class="rangoli" aria-hidden="true">
+    <span style="background:#FFC24B"></span><span style="background:#2DD4BF"></span>
+    <span style="background:#F973B6"></span><span style="background:#A78BFA"></span>
+    <span style="background:#FFF3DC"></span>
+  </div>
+
+  <div class="foot">Tip: open any game, tap the share button in Safari, and “Add to Home Screen” — it becomes an app icon on your iPad. 💛</div>
+</div>
+</body>
+</html>
