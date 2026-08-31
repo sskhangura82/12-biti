@@ -124,6 +124,40 @@
   }
   a:hover { border-bottom-color: #7A5228; }
 
+  /* ---------- back link ---------- */
+  a.backlink {
+    display: inline-block;
+    margin-bottom: 34px;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 0.8rem;
+    letter-spacing: 0.03em;
+    color: #8A8172;
+    border-bottom: 0;
+  }
+  a.backlink:hover { color: #7A5228; border-bottom: 0; }
+
+  /* ---------- findings & fixes ---------- */
+  ul.findings {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  ul.findings li {
+    padding: 14px 0;
+    border-top: 1px solid #EDE6D9;
+  }
+  ul.findings li:first-child { border-top: 0; padding-top: 0; }
+  ul.findings li:last-child { padding-bottom: 0; }
+  .finding-date {
+    display: block;
+    margin-bottom: 4px;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 0.74rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    color: #8A8172;
+  }
+
   /* ---------- footer ---------- */
   footer {
     margin-top: 72px;
@@ -150,6 +184,8 @@
 </head>
 <body>
 <div class="page">
+
+  <a class="backlink" href="../">&larr; Back to the games</a>
 
   <header>
     <h1>Built Governed ✓</h1>
@@ -180,8 +216,8 @@
     <p class="dek">The one link our family plays on.</p>
     <p><span class="label">What it is:</span> classic courtyard games — 12 Biti, Ludo, Saanp Seedhi, X·O — rebuilt as polished web games, all living on a single hub page.</p>
     <p><span class="label">How it’s kept honest:</span> every release is pinned by cryptographic hash and verified at both the repository and the live site before it counts as shipped.</p>
-    <p><span class="label">Your data:</span> far-away game rooms connect phone-to-phone; we run no game servers and store nothing about you.</p>
-    <p><span class="label">Known limits, stated plainly:</span> both players need to be online at the same time, and some very strict networks may not connect.</p>
+    <p><span class="label">Your data:</span> on this site the games play on one screen or against the computer — nothing leaves your device, and we run no servers. Far-away rooms exist only on the Claude-hosted copy of these games; there, the 4-letter room code and the game state pass through Claude’s shared storage, which is not ours. We store nothing about you either way.</p>
+    <p><span class="label">Known limits, stated plainly:</span> there is no far-away play on this site — only on the Claude-hosted copy, where both players must be online at the same time. 12 Biti and X·O have rooms; Ludo and Saanp Seedhi are one-screen only.</p>
     <p><span class="label">Source:</span> <a href="https://github.com/sskhangura82/12-biti">github.com/sskhangura82/12-biti</a>.</p>
   </section>
 
@@ -196,6 +232,22 @@
     <p>— it supports clinical judgment and never replaces the evaluation of a doctor who knows the patient.</p>
     <p>It runs in your browser and asks for no account.</p>
     <p><span class="label">Honesty note:</span> the current live build predates our latest design system; a refreshed release is on the roadmap, and we say so here because stating what’s imperfect is part of being governed.</p>
+  </section>
+
+  <hr class="rule"/>
+
+  <section>
+    <span class="eyebrow">Findings &amp; Fixes</span>
+    <ul class="findings">
+      <li>
+        <span class="finding-date">2026-08-30</span>
+        Our own release check found the games hub loading fonts from Google’s servers on every visit, contradicting this pledge. Fixed the same day: all fonts and libraries are now served from this site. Findings get named and fixed here, in public.
+      </li>
+      <li>
+        <span class="finding-date">2026-08-30</span>
+        The same check found this page describing far-away game rooms as connecting “phone-to-phone.” They never did: the code has no peer-to-peer connection at all, and where rooms do work they pass through Claude’s shared storage. The claim is corrected above. We would rather name our own overstatement than leave it standing.
+      </li>
+    </ul>
   </section>
 
   <footer>
