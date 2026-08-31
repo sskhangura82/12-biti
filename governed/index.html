@@ -216,8 +216,8 @@
     <p class="dek">The one link our family plays on.</p>
     <p><span class="label">What it is:</span> classic courtyard games — 12 Biti, Ludo, Saanp Seedhi, X·O — rebuilt as polished web games, all living on a single hub page.</p>
     <p><span class="label">How it’s kept honest:</span> every release is pinned by cryptographic hash and verified at both the repository and the live site before it counts as shipped.</p>
-    <p><span class="label">Your data:</span> on this site the games play on one screen or against the computer — nothing leaves your device, and we run no servers. Far-away rooms exist only on the Claude-hosted copy of these games; there, the 4-letter room code and the game state pass through Claude’s shared storage, which is not ours. We store nothing about you either way.</p>
-    <p><span class="label">Known limits, stated plainly:</span> there is no far-away play on this site — only on the Claude-hosted copy, where both players must be online at the same time. 12 Biti and X·O have rooms; Ludo and Saanp Seedhi are one-screen only.</p>
+    <p><span class="label">Your data:</span> far-away rooms in 12 Biti and X·O connect the two phones directly (WebRTC). A public PeerJS broker only introduces them by room code; moves then travel phone-to-phone. On networks that block a direct link, the connection falls back to PeerJS’s free public relay — not a server of ours, and the moves stay encrypted end-to-end through it. We run no game servers and store nothing about you. Ludo and Saanp Seedhi are same-screen or vs-computer for now.</p>
+    <p><span class="label">Known limits, stated plainly:</span> both phones must be online at the same time; on strict networks the direct link may fail and fall back to a shared public relay we don’t control, which can be slow or unavailable.</p>
     <p><span class="label">Source:</span> <a href="https://github.com/sskhangura82/12-biti">github.com/sskhangura82/12-biti</a>.</p>
   </section>
 
@@ -246,6 +246,10 @@
       <li>
         <span class="finding-date">2026-08-30</span>
         The same check found this page describing far-away game rooms as connecting “phone-to-phone.” They never did: the code has no peer-to-peer connection at all, and where rooms do work they pass through Claude’s shared storage. The claim is corrected above. We would rather name our own overstatement than leave it standing.
+      </li>
+      <li>
+        <span class="finding-date">2026-08-30</span>
+        Far-away rooms were missing from this site: the phone-to-phone build was completed on 7/25 but never deployed. Recovered today from the original session, provenance proven by hash against the build manifest, fonts self-hosted, and shipped. The room claim on this page is now true.
       </li>
     </ul>
   </section>

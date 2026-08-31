@@ -109,21 +109,25 @@ function chooseAi(board, order, level, blitz) {
   return pick;
 }
 
-/* ---------- online rooms (Claude shared storage) ---------- */
-const hasStorage =
-  typeof window !== "undefined" && window.storage &&
-  typeof window.storage.get === "function" && typeof window.storage.set === "function";
+/* ---------- online rooms (phone-to-phone, no server of ours) ---------- */
+const PEER_CDN = "https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js";
+let peerLoadP = null;
+function ensurePeer() {
+  if (typeof window !== "undefined" && window.Peer) return Promise.resolve(window.Peer);
+  if (!peerLoadP) {
+    peerLoadP = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = PEER_CDN; s.async = true;
+      s.onload = () => (window.Peer ? resolve(window.Peer) : reject(new Error("Peer missing")));
+      s.onerror = () => reject(new Error("Peer load failed"));
+      document.head.appendChild(s);
+    });
+  }
+  return peerLoadP;
+}
 const ROOM_ALPHA = "ABCDEFGHJKLMNPRSTUVWXYZ";
 const makeCode = () => Array.from({ length: 4 }, () => ROOM_ALPHA[Math.floor(Math.random() * ROOM_ALPHA.length)]).join("");
-const roomKey = (code) => "ttt:room:" + code;
-async function roomGet(code) {
-  try { const r = await window.storage.get(roomKey(code), true); return r && r.value ? JSON.parse(r.value) : null; }
-  catch (e) { return null; }
-}
-async function roomSet(code, obj) {
-  try { const r = await window.storage.set(roomKey(code), JSON.stringify(obj), true); return !!r; }
-  catch (e) { return false; }
-}
+const roomId = (code) => "courtyard-ttt-" + code.toLowerCase();
 function serializeRoom(g) {
   return {
     v: 1, seq: g.seq, phase: g.phase, t: Date.now(),
@@ -304,7 +308,9 @@ export default function ChalkTicTacToe() {
   const soundRef = useRef(true); soundRef.current = sound;
   const gameRef = useRef(null); gameRef.current = game;
   const aiBusyRef = useRef(false);
-  const pollBusyRef = useRef(false);
+  const peerRef = useRef(null);
+  const connRef = useRef(null);
+  const joinTimerRef = useRef(null);
   const notifSeqRef = useRef(0);
   const play = useSounds(soundRef);
 
@@ -337,45 +343,173 @@ export default function ChalkTicTacToe() {
     const av2 = mode === "ai" ? "🤖" : (menuAv2 !== menuAv1 ? menuAv2 : AVATARS.find((a) => a !== menuAv1));
     setGame(baseGame(mode, variant, { level: level || null, avatars: { 1: menuAv1, 2: av2 } }));
   }
-  const toMenu = () => { setGame(null); aiBusyRef.current = false; };
+  const toMenu = () => { killNet(); setGame(null); aiBusyRef.current = false; };
+
+  /* ----- online: phone-to-phone plumbing ----- */
+  function killNet() {
+    if (joinTimerRef.current) { clearTimeout(joinTimerRef.current); joinTimerRef.current = null; }
+    try { if (connRef.current) connRef.current.close(); } catch (e) {}
+    try { if (peerRef.current) peerRef.current.destroy(); } catch (e) {}
+    connRef.current = null; peerRef.current = null;
+  }
+  function wireConn(conn, role) {
+    connRef.current = conn;
+    conn.on("data", (msg) => onNetData(msg, role));
+    conn.on("close", () => onNetDrop(role));
+    conn.on("error", () => onNetDrop(role));
+    if (role === "host") {
+      setTimeout(() => {
+        const g = gameRef.current;
+        if (g && g.mode === "online" && g.phase !== "lobby" && connRef.current && connRef.current.open) {
+          try { connRef.current.send({ t: "state", s: serializeRoom(g) }); } catch (e) {}
+        }
+      }, 150);
+    }
+  }
+  function onNetData(msg, role) {
+    if (!msg || typeof msg !== "object") return;
+    if (msg.t === "hello" && role === "host") {
+      const g = gameRef.current;
+      if (!g || g.mode !== "online" || g.role !== "host" || g.avatars[2]) return;
+      const av2 = msg.av && msg.av !== g.avatars[1] ? msg.av : AVATARS.find((a) => a !== g.avatars[1]);
+      play("start");
+      showToast(`${NAME_OF[av2] || "A friend"} joined — X goes first! ✨`);
+      setGame((prev) => {
+        if (!prev || prev.mode !== "online" || prev.role !== "host" || prev.avatars[2]) return prev;
+        return markMine({ ...prev, phase: "playing", avatars: { ...prev.avatars, 2: av2 } });
+      });
+      return;
+    }
+    if (msg.t === "state" && msg.s) adoptState(msg.s);
+  }
+  function adoptState(r) {
+    const g2 = gameRef.current;
+    if (!g2 || g2.mode !== "online") return;
+    if (!g2.joining && r.seq <= (g2.seq || 0)) return;
+    const wasLobby = g2.phase === "lobby" || g2.joining;
+    const placedByThem = r.board.findIndex((v, i) => v !== 0 && g2.board[i] === 0);
+    setGame((prev) => {
+      if (!prev || prev.mode !== "online") return prev;
+      return {
+        ...prev, joining: false,
+        seq: r.seq, phase: r.phase, mine: false,
+        avatars: { 1: r.hostAv || prev.avatars[1], 2: r.guestAv || prev.avatars[2] },
+        variant: r.variant || prev.variant,
+        board: r.board, order: r.order, current: r.current,
+        winner: r.winner ?? null, winLine: r.winLine ?? null,
+        score: r.score || prev.score, round: r.round || prev.round,
+        roundStarter: r.roundStarter || prev.roundStarter, champ: r.champ ?? null,
+      };
+    });
+    if (!wasLobby && placedByThem >= 0) {
+      play(r.board[placedByThem] === 1 ? "x" : "o");
+      setLastPlaced({ pos: placedByThem, key: Date.now() });
+    }
+    const mp = g2.role === "host" ? 1 : 2;
+    if (wasLobby) {
+      if (g2.role === "guest") {
+        play("start");
+        showToast(`You're O — ${r.variant === "blitz" ? "💨 Blitz!" : "Classic"} ${NAME_OF[r.hostAv] || "Your friend"} starts`);
+      }
+      notifSeqRef.current = r.seq;
+    } else if (!r.winner && !r.champ && r.current === mp && notifSeqRef.current !== r.seq) {
+      notifSeqRef.current = r.seq;
+      play("turn");
+    }
+  }
+  function onNetDrop(role) {
+    const g = gameRef.current;
+    if (!g || g.mode !== "online") return;
+    showToast("Connection wobbled — reconnecting…");
+    if (role === "guest") tryReconnect(0);
+  }
+  function tryReconnect(n) {
+    const g = gameRef.current;
+    if (!g || g.mode !== "online" || g.role !== "guest") return;
+    if (n >= 5) { showToast("Couldn't reconnect — ask for a fresh room"); return; }
+    const p = peerRef.current;
+    if (!p || p.destroyed) return;
+    setTimeout(() => {
+      const g2 = gameRef.current;
+      if (!g2 || g2.mode !== "online") return;
+      const conn = p.connect(roomId(g2.code), { reliable: true });
+      let ok = false;
+      conn.on("open", () => { ok = true; wireConn(conn, "guest"); showToast("Reconnected ✨"); });
+      conn.on("error", () => {});
+      setTimeout(() => { if (!ok) tryReconnect(n + 1); }, 2600);
+    }, 1200);
+  }
 
   /* ----- online ----- */
   async function createRoom(variant) {
     if (onlineBusy) return;
     setOnlineBusy(true); play("start");
-    const code = makeCode();
-    const g = baseGame("online", variant, { role: "host", code, seq: 1, phase: "lobby", avatars: { 1: menuAv1, 2: null } });
-    const ok = await roomSet(code, serializeRoom(g));
-    setOnlineBusy(false);
-    if (!ok) { showToast("Couldn't make a room — try again in a moment"); return; }
-    notifSeqRef.current = 1;
-    setLastPlaced(null);
-    setGame(g);
+    let Peer;
+    try { Peer = await ensurePeer(); } catch (e) {
+      setOnlineBusy(false); showToast("Couldn't reach the connection helper — check internet"); return;
+    }
+    killNet();
+    const tryOpen = (attempt) => {
+      const code = makeCode();
+      const p = new Peer(roomId(code), { debug: 0 });
+      peerRef.current = p;
+      p.on("open", () => {
+        setOnlineBusy(false);
+        notifSeqRef.current = 1;
+        setLastPlaced(null);
+        setGame(baseGame("online", variant, { role: "host", code, seq: 1, phase: "lobby", avatars: { 1: menuAv1, 2: null }, level: null }));
+      });
+      p.on("connection", (conn) => wireConn(conn, "host"));
+      p.on("error", (err) => {
+        if (err && err.type === "unavailable-id" && attempt < 3) {
+          try { p.destroy(); } catch (e2) {}
+          tryOpen(attempt + 1);
+        } else if (!gameRef.current || gameRef.current.mode !== "online") {
+          setOnlineBusy(false);
+          showToast("Couldn't open a room — try again in a moment");
+        }
+      });
+    };
+    tryOpen(0);
   }
   async function joinRoom(codeRaw) {
     if (onlineBusy) return;
     const code = (codeRaw || "").toUpperCase().trim();
     if (code.length !== 4) { showToast("Room codes are 4 letters"); return; }
     setOnlineBusy(true);
-    const r = await roomGet(code);
-    if (!r) { setOnlineBusy(false); showToast(`No room called ${code} — check the letters`); return; }
-    if (r.guestJoined || r.phase !== "lobby") { setOnlineBusy(false); showToast("That room already has two players"); return; }
-    if (r.t && Date.now() - r.t > 10 * 60 * 1000) { setOnlineBusy(false); showToast("That room looks old — ask for a fresh code"); return; }
-    const g = {
-      gen: Date.now(), mode: "online", role: "guest", code, seq: r.seq + 1, phase: "playing",
-      variant: r.variant, avatars: { 1: r.hostAv, 2: menuAv1 !== r.hostAv ? menuAv1 : AVATARS.find((a) => a !== r.hostAv) },
-      board: r.board, order: r.order, current: r.current,
-      winner: null, winLine: null, champ: null,
-      score: r.score || { 1: 0, 2: 0 }, round: r.round || 1, roundStarter: r.roundStarter || 1,
-      level: null,
-    };
-    const ok = await roomSet(code, serializeRoom(g));
-    setOnlineBusy(false);
-    if (!ok) { showToast("Couldn't join — try again"); return; }
-    play("start");
-    notifSeqRef.current = g.seq;
-    setLastPlaced(null);
-    setGame(g);
+    let Peer;
+    try { Peer = await ensurePeer(); } catch (e) {
+      setOnlineBusy(false); showToast("Couldn't reach the connection helper — check internet"); return;
+    }
+    killNet();
+    const p = new Peer({ debug: 0 });
+    peerRef.current = p;
+    p.on("error", (err) => {
+      if (err && err.type === "peer-unavailable") {
+        setOnlineBusy(false);
+        showToast(`No one's home at ${code} — ask them to open their room first`);
+      }
+    });
+    p.on("open", () => {
+      const conn = p.connect(roomId(code), { reliable: true });
+      joinTimerRef.current = setTimeout(() => {
+        setOnlineBusy(false);
+        showToast(`No answer from ${code} — is their room open?`);
+        killNet();
+      }, 9000);
+      conn.on("open", () => {
+        if (joinTimerRef.current) { clearTimeout(joinTimerRef.current); joinTimerRef.current = null; }
+        wireConn(conn, "guest");
+        try { conn.send({ t: "hello", av: menuAv1 }); } catch (e) {}
+        notifSeqRef.current = 0;
+        setLastPlaced(null);
+        setGame({
+          ...baseGame("online", "blitz", { role: "guest", code, seq: 0, phase: "lobby", avatars: { 1: null, 2: menuAv1 }, level: null }),
+          joining: true,
+        });
+        setOnlineBusy(false);
+      });
+    });
   }
   const markMine = (g) => { if (g.mode === "online") { g.seq = (g.seq || 0) + 1; g.mine = true; g.dirty = Date.now(); } return g; };
 
@@ -468,56 +602,17 @@ export default function ChalkTicTacToe() {
     }, 620 + Math.random() * 300);
   }, [game && game.current, game && game.winner, game && game.round]); // eslint-disable-line
 
-  /* ----- online push + poll ----- */
+  /* ----- online push over the wire + teardown ----- */
   useEffect(() => {
     const g = gameRef.current;
-    if (!g || g.mode !== "online" || !g.mine || !g.code) return;
-    roomSet(g.code, serializeRoom(g)).then((ok) => {
-      if (!ok) showToast("Connection hiccup — that move may not have synced");
-    });
+    if (!g || g.mode !== "online" || !g.mine) return;
+    const conn = connRef.current;
+    if (conn && conn.open) {
+      try { conn.send({ t: "state", s: serializeRoom(g) }); } catch (e) {}
+    }
   }, [game && game.dirty]); // eslint-disable-line
 
-  useEffect(() => {
-    if (!game || game.mode !== "online" || !game.code) return;
-    const iv = setInterval(async () => {
-      const g = gameRef.current;
-      if (!g || g.mode !== "online" || pollBusyRef.current) return;
-      pollBusyRef.current = true;
-      const r = await roomGet(g.code);
-      pollBusyRef.current = false;
-      const g2 = gameRef.current;
-      if (!r || !g2 || g2.mode !== "online" || r.seq <= (g2.seq || 0)) return;
-      const wasLobby = g2.phase === "lobby";
-      const placedByThem = r.board.findIndex((v, i) => v !== 0 && g2.board[i] === 0);
-      setGame((prev) => {
-        if (!prev || prev.mode !== "online") return prev;
-        return {
-          ...prev,
-          seq: r.seq, phase: r.phase, mine: false,
-          avatars: { 1: r.hostAv || prev.avatars[1], 2: r.guestAv || prev.avatars[2] },
-          variant: r.variant || prev.variant,
-          board: r.board, order: r.order, current: r.current,
-          winner: r.winner ?? null, winLine: r.winLine ?? null,
-          score: r.score || prev.score, round: r.round || prev.round,
-          roundStarter: r.roundStarter || prev.roundStarter, champ: r.champ ?? null,
-        };
-      });
-      if (!wasLobby && placedByThem >= 0) {
-        play(r.board[placedByThem] === 1 ? "x" : "o");
-        setLastPlaced({ pos: placedByThem, key: Date.now() });
-      }
-      const mp = g2.role === "host" ? 1 : 2;
-      if (wasLobby && r.phase === "playing") {
-        play("start");
-        showToast(`${NAME_OF[r.guestAv] || "A friend"} joined — X goes first! ✨`);
-        notifSeqRef.current = r.seq;
-      } else if (!r.winner && !r.champ && r.current === mp && notifSeqRef.current !== r.seq) {
-        notifSeqRef.current = r.seq;
-        play("turn");
-      }
-    }, 2000);
-    return () => clearInterval(iv);
-  }, [game && game.mode, game && game.code]); // eslint-disable-line
+  useEffect(() => () => { killNet(); }, []); // eslint-disable-line
 
   /* ================= render ================= */
   const css = `
@@ -678,7 +773,7 @@ function Menu({ av1, av2, setAv1, setAv2, onStart, onRules, onCreateRoom, onJoin
           ))}
         </div>
       )}
-      {mode === "online" && (hasStorage ? (
+      {mode === "online" && (
         <div className="w-full max-w-xs flex flex-col gap-3 items-center">
           <button onClick={() => onCreateRoom(variant)} disabled={onlineBusy}
             className="biti-display font-extrabold text-lg px-8 py-3 rounded-full active:scale-95 transition-transform w-full"
@@ -699,14 +794,10 @@ function Menu({ av1, av2, setAv1, setAv2, onStart, onRules, onCreateRoom, onJoin
             </button>
           </div>
           <div className="text-xs text-amber-200/60 text-center leading-snug">
-            The room maker plays X and picks the variant. Read the 4 letters to your friend — any distance!
+            The room maker plays X and picks the variant, then texts the 4 letters. The other opens this same link and joins — any distance, phone to phone!
           </div>
         </div>
-      ) : (
-        <div className="w-full max-w-xs text-center text-sm text-amber-200/70 rounded-2xl px-4 py-3" style={{ border: `1.5px dashed ${CHALK}44` }}>
-          Far-away rooms work on the Claude game link. This copy plays together on one screen, or against the computer. 💛
-        </div>
-      ))}
+      )}
 
       <button onClick={onRules} className="biti-display text-amber-200/80 underline underline-offset-4 text-sm">
         How to play?
@@ -733,6 +824,21 @@ function AvatarPick({ label, chosen, onPick, ring }) {
 }
 
 function Lobby({ game, onCancel }) {
+  if (game.joining) {
+    return (
+      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6 gap-5 text-center" style={{ animation: "bitiRise .35s ease-out" }}>
+        <div className="text-5xl">{game.avatars[2]}</div>
+        <div className="biti-display font-extrabold text-2xl" style={{ color: CHALK }}>Knocking on {game.code}…</div>
+        <div className="biti-display font-semibold text-amber-200/80">
+          Waiting for the door to open
+          {[0, 1, 2].map((i) => <span key={i} style={{ animation: `bitiThink 1.1s ${i * 0.18}s infinite` }}>.</span>)}
+        </div>
+        <button onClick={onCancel} className="biti-display font-semibold px-6 py-2 rounded-full" style={{ border: `1.5px solid ${CHALK}55`, color: CHALK }}>
+          Cancel
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6 gap-5 text-center" style={{ animation: "bitiRise .35s ease-out" }}>
       <div className="text-5xl">{game.avatars[1]}</div>
