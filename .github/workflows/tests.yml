@@ -1,0 +1,90 @@
+# CI_TRUTH_RESTORATION_001 / F1 — pytest as an enforced gate on every pull request.
+#
+# Why this file exists
+# --------------------
+# OUTSIDER_DEV_REVIEW_001 (adjudicated 2026-10-07) found, from two independent cold
+# reviewers, that in every repository where a governance gate was installed that gate
+# was either red or had never executed, and that this account's Python test files ran
+# in no continuous integration at all. This workflow is the missing enforcement point.
+# It is deliberately minimal and deliberately boring.
+#
+# Design rules it follows, each one a defect of record it is avoiding
+# ------------------------------------------------------------------
+#   1. Actions are pinned to 40-hex commit SHAs, never to mutable tags. A mutable tag
+#      lets an upstream change alter this gate between runs.
+#   2. Job-level `env:` only. No `secrets.*` appears in any `if:` anywhere in this
+#      file. A `secrets.*` reference inside a step-level `if:` is rejected by the
+#      Actions validator, which creates ZERO jobs and records the run as a plain
+#      failure -- that is precisely the defect that made
+#      governed-builder-harness/.github/workflows/release.yml fail 786 of 786 runs
+#      while appearing to be an installed release gate.
+#   3. It fails CLOSED. When test files are present, pytest must collect at least one
+#      test and every test must pass. `pytest` exits 5 when it collects nothing, and
+#      `set -euo pipefail` turns that into a red check instead of a vacuous green.
+#   4. When a repository genuinely has no Python tests, this check says so out loud
+#      in the run annotation rather than reporting a green that implies tests ran.
+#      A green check that enforced nothing is the same class of untruth this job was
+#      dispatched to remove.
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    # Job-level env only. See design rule 2 above.
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # Full history, not the action's default shallow depth-1 clone. Measured
+          # reason: in governed-builder-harness, tests/test_operator_protocol.py
+          # resolves commit and merge citations against real git history, and
+          # tests/test_runtime_sensing.py walks the tree. Under a depth-1 checkout
+          # those four tests fail for a reason that has nothing to do with the code
+          # under test -- a gate that reports a defect it invented is no better than
+          # a gate that reports a green it did not earn.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then python -m pip install -r requirements-dev.txt; fi
+          if [ -f pyproject.toml ] || [ -f setup.py ]; then python -m pip install -e .; fi
+          python -m pip install pytest
+
+      - name: Run pytest
+        run: |
+          set -euo pipefail
+          # Discover test files from the checked-out tree itself, so this reports on the
+          # ref under test and not on an assumption about the repository's layout.
+          discovered="$(git ls-files '*test_*.py' '*_test.py' || true)"
+          if [ -z "${discovered}" ]; then
+            echo "::warning title=No Python tests found::This repository has no test_*.py or *_test.py files on this ref. This check therefore enforced NOTHING on this run and is not evidence that anything was tested."
+            echo "NO PYTHON TEST FILES ON THIS REF — this check enforced nothing."
+            exit 0
+          fi
+          echo "Test files discovered on this ref:"
+          echo "${discovered}"
+          echo "---"
+          # No -k, no --ignore, no deselection: the whole collected suite must pass.
+          python -m pytest -q
