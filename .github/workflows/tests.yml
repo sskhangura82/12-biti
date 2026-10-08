@@ -48,6 +48,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          # Full history, not the action's default shallow depth-1 clone. Measured
+          # reason: in governed-builder-harness, tests/test_operator_protocol.py
+          # resolves commit and merge citations against real git history, and
+          # tests/test_runtime_sensing.py walks the tree. Under a depth-1 checkout
+          # those four tests fail for a reason that has nothing to do with the code
+          # under test -- a gate that reports a defect it invented is no better than
+          # a gate that reports a green it did not earn.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Python
